@@ -96,6 +96,7 @@ nix-env -q '*' | grep -q foo-2.0
 nix-env -q '*' | grep -q bar
 
 
+
 # Rollback again: should remove "bar".
 nix-env --rollback
 nix-env -q '*' | grep -q foo-2.0
