@@ -81,7 +81,7 @@ outPath20=$(nix-env -q --out-path --no-name '*' | grep foo-2.0)
 test -n "$outPath20"
 
 # Install bar-0.1, uninstall foo.
-nix-env -i bar-0.1
+nix-env -i bar-0.1 -vvv
 nix-env -e foo
 
 # Query installed: should only contain bar-0.1 now.
@@ -132,7 +132,7 @@ if nix-env -q '*' | grep -q foo; then false; fi
 (! nix-store -qR $profiles/test | grep "$outPath10")
 
 # Install foo-1.0, now using a symlink to its store path.
-nix-env -i $TEST_ROOT/symlink
+nix-env -i $TEST_ROOT/symlink -vvv
 nix-env -q '*' | grep -q foo
 
 # Delete all old generations.
@@ -156,7 +156,7 @@ nix-env -q '*' | grep -q foo-2.0
 # On the other hand, this should install both (and should fail due to
 # a collision).
 nix-env -e '*'
-(! nix-env -i foo-1.0 foo-2.0)
+(! nix-env -i foo-1.0 foo-2.0 -vvv)
 
 # Installing "*" should install one foo and one bar.
 nix-env -e '*'
