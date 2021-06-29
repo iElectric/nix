@@ -28,7 +28,7 @@ nix-env -qa '*' --description | grep -q silly
 nix-env -qa '*' --system | grep -q $system
 
 # Install "foo-1.0".
-nix-env -i foo-1.0
+nix-env -i foo-1.0 -vvv
 
 # Query installed: should contain foo-1.0 now (which should be
 # executable).
@@ -107,8 +107,8 @@ test "$(nix-env --list-generations | wc -l)" -eq 7
 # Doing the same operation twice results in the same generation, which triggers
 # "lazy" behaviour and does not create a new symlink.
 
-nix-env -i foo
-nix-env -i foo
+nix-env -i foo -vvv
+nix-env -i foo -vvv
 
 # Count generations.
 nix-env --list-generations
@@ -119,7 +119,7 @@ nix-env --switch-generation 7
 [ "$(nix-store -q --resolve $profiles/test)" = "$oldGen" ]
 
 # Install foo-1.0, now using its store path.
-nix-env -i "$outPath10"
+nix-env -i "$outPath10" -vvv
 nix-env -q '*' | grep -q foo-1.0
 nix-store -qR $profiles/test | grep "$outPath10"
 nix-store -q --referrers-closure $profiles/test | grep "$(nix-store -q --resolve $profiles/test)"
@@ -149,7 +149,7 @@ nix-env -e '*'
 test "$(nix-env -q '*' | wc -l)" -eq 0
 
 # Installing "foo" should only install the newest foo.
-nix-env -i foo
+nix-env -i foo -vvv
 test "$(nix-env -q '*' | grep foo- | wc -l)" -eq 1
 nix-env -q '*' | grep -q foo-2.0
 
