@@ -4,6 +4,7 @@
 #include "serialise.hh"
 #include "worker-protocol.hh"
 #include "archive.hh"
+
 #include "affinity.hh"
 #include "globals.hh"
 #include "monitor-fd.hh"
