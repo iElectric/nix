@@ -118,9 +118,12 @@ void buildProfile(const Path & out, Packages && pkgs)
 
     std::set<Path> done, postponed;
 
+    debug("collecting packages to be postponed");
+
     auto addPkg = [&](const Path & pkgDir, int priority) {
         if (!done.insert(pkgDir).second) return;
         createLinks(state, pkgDir, out, priority);
+        debug("created links");
 
         try {
             for (const auto & p : tokenizeString<std::vector<string>>(
@@ -169,6 +172,8 @@ void builtinBuildenv(const BasicDerivation & drv)
 
     Path out = getAttr("out");
     createDirs(out);
+
+    debug("loading data from environment");
 
     /* Convert the stuff we get from the environment back into a
      * coherent data type. */
