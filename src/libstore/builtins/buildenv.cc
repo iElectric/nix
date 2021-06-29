@@ -135,6 +135,7 @@ void buildProfile(const Path & out, Packages && pkgs)
         }
     };
 
+
     /* Symlink to the packages that have been installed explicitly by the
      * user. Process in priority order to reduce unnecessary
      * symlink/unlink steps.
