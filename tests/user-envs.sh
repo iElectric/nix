@@ -48,11 +48,11 @@ nix-env -qas | grep -q 'IP-  foo-1.0'
 nix-env -qas | grep -q -- '---  bar-0.1'
 
 # Disable foo.
-nix-env --set-flag active false foo
+nix-env --set-flag active false foo -vvv
 (! [ -e "$profiles/test/bin/foo" ])
 
 # Enable foo.
-nix-env --set-flag active true foo
+nix-env --set-flag active true foo -vvv
 [ -e "$profiles/test/bin/foo" ]
 
 # Store the path of foo-1.0.
@@ -160,7 +160,7 @@ nix-env -e '*'
 
 # Installing "*" should install one foo and one bar.
 nix-env -e '*'
-nix-env -i '*'
+nix-env -i '*' -vvv
 test "$(nix-env -q '*' | wc -l)" -eq 2
 nix-env -q '*' | grep -q foo-2.0
 nix-env -q '*' | grep -q bar-0.1.1
@@ -169,9 +169,9 @@ nix-env -q '*' | grep -q bar-0.1.1
 # should be possible to install both without a collision.  Also test
 # ‘--set-flag priority’ to manually override the declared priorities.
 nix-env -e '*'
-nix-env -i foo-0.1 foo-1.0
+nix-env -i foo-0.1 foo-1.0 -vvv
 [ "$($profiles/test/bin/foo)" = "foo-1.0" ]
-nix-env --set-flag priority 1 foo-0.1
+nix-env --set-flag priority 1 foo-0.1 -vvv
 [ "$($profiles/test/bin/foo)" = "foo-0.1" ]
 
 # Test nix-env --set.
