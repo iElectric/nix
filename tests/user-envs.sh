@@ -69,7 +69,7 @@ nix-env -q '*' | grep -q foo-2.0pre1
 test "$($profiles/test/bin/foo)" = "foo-2.0pre1"
 
 # Upgrade "foo": should install foo-2.0.
-NIX_PATH=nixpkgs=./user-envs.nix:$NIX_PATH nix-env -f '<nixpkgs>' -u foo
+NIX_PATH=nixpkgs=./user-envs.nix:$NIX_PATH nix-env -f '<nixpkgs>' -u foo -vvv
 
 # Query installed: should contain foo-2.0 now.
 test "$(nix-env -q '*' | wc -l)" -eq 1
