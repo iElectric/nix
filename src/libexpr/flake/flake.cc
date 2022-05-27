@@ -149,10 +149,15 @@ static Flake readFlake(
     const FlakeRef & resolvedRef,
     const FlakeRef & lockedRef,
     const SourcePath & rootDir,
-    const InputPath & lockRootPath)
+    const InputPath & lockRootPath,
+    bool dependencyOperation = false)
 {
     CanonPath flakeDir(resolvedRef.subdir);
-    auto flakePath = rootDir + flakeDir + "flake.nix";
+    char * suffix = getenv("FLAKE_FILE");
+    if (!suffix || dependencyOperation) {
+        suffix = "flake.nix";
+    }
+    auto flakePath = rootDir + flakeDir + suffix;
 
     if (!flakePath.pathExists())
         throw Error("file '%s' does not exist", flakePath);
@@ -266,7 +271,8 @@ static Flake getFlake(
     EvalState & state,
     const FlakeRef & originalRef,
     bool useRegistries,
-    const InputPath & lockRootPath)
+    const InputPath & lockRootPath,
+    bool dependencyOperation = false)
 {
     auto resolvedRef = maybeResolve(state, originalRef, useRegistries);
 
@@ -274,7 +280,7 @@ static Flake getFlake(
 
     state.registerAccessor(accessor);
 
-    return readFlake(state, originalRef, resolvedRef, lockedRef, SourcePath {accessor, CanonPath::root}, lockRootPath);
+    return readFlake(state, originalRef, resolvedRef, lockedRef, SourcePath {accessor, CanonPath::root}, lockRootPath, dependencyOperation);
 }
 
 Flake getFlake(EvalState & state, const FlakeRef & originalRef, bool useRegistries)
@@ -282,9 +288,13 @@ Flake getFlake(EvalState & state, const FlakeRef & originalRef, bool useRegistri
     return getFlake(state, originalRef, useRegistries, {});
 }
 
-static LockFile readLockFile(const Flake & flake)
+static LockFile readLockFile(const Flake & flake, bool dependencyOperation = false)
 {
-    auto lockFilePath = flake.path.parent() + "flake.lock";
+    char * suffix = getenv("FLAKE_LOCK");
+    if (!suffix || dependencyOperation) {
+        suffix = "flake.lock";
+    }
+    auto lockFilePath = flake.path.parent() + suffix;
     return lockFilePath.pathExists()
         ? LockFile(lockFilePath.readFile(), fmt("%s", lockFilePath))
         : LockFile();
@@ -442,9 +452,9 @@ LockedFlake lockFlake(
                                 overridenSourcePath.accessor,
                                 CanonPath(*relativePath, *overridenSourcePath.path.parent())
                             };
-                            return readFlake(state, *input.ref, *input.ref, *input.ref, inputSourcePath, inputPath);
+                            return readFlake(state, *input.ref, *input.ref, *input.ref, inputSourcePath, inputPath, true);
                         } else
-                            return getFlake(state, *input.ref, useRegistries, inputPath);
+                            return getFlake(state, *input.ref, useRegistries, inputPath, true);
                     };
 
                     /* Do we have an entry in the existing lock file? And we
@@ -577,7 +587,7 @@ LockedFlake lockFlake(
                                 inputFlake.inputs, childNode, inputPath,
                                 oldLock
                                 ? std::dynamic_pointer_cast<const Node>(oldLock)
-                                : (std::shared_ptr<Node>) readLockFile(inputFlake).root,
+                                : (std::shared_ptr<Node>) readLockFile(inputFlake, true).root,
                                 oldLock ? followsPrefix : inputPath,
                                 inputFlake.path,
                                 false);
@@ -641,7 +651,11 @@ LockedFlake lockFlake(
                     if (!lockFlags.updateLockFile)
                         throw Error("flake '%s' requires lock file changes but they're not allowed due to '--no-update-lock-file'", topRef);
 
-                    auto path = flake->path.parent() + "flake.lock";
+                    char * suffix = getenv("FLAKE_LOCK");
+                    if (!suffix) {
+                        suffix = "flake.lock";
+                    }
+                    auto path = flake->path.parent() + suffix;
 
                     bool lockFileExists = path.pathExists();
 
