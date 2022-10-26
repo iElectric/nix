@@ -1,4 +1,5 @@
 #include "flake.hh"
+#include <boost/stacktrace.hpp>
 #include "eval.hh"
 #include "lockfile.hh"
 #include "primops.hh"
@@ -152,8 +153,10 @@ static Flake readFlake(
     }
     auto flakePath = rootDir + flakeDir + suffix;
 
+    //std::cerr << flakePath;
+    //std::cerr << boost::stacktrace::stacktrace();
     if (!flakePath.pathExists())
-        throw Error("file '%s' does not exist", flakePath);
+        throw Error("flake '%s' does not exist", flakePath);
 
     Value vInfo;
     state.evalFile(flakePath, vInfo, true);
@@ -298,13 +301,14 @@ static LockFile readLockFile(const Flake & flake, bool dependencyOperation = fal
 LockedFlake lockFlake(
     EvalState & state,
     const FlakeRef & topRef,
-    const LockFlags & lockFlags)
+    const LockFlags & lockFlags,
+    bool dependency)
 {
     settings.requireExperimentalFeature(Xp::Flakes);
 
     auto useRegistries = lockFlags.useRegistries.value_or(fetchSettings.useRegistries);
 
-    auto flake = std::make_unique<Flake>(getFlake(state, topRef, useRegistries, {}));
+    auto flake = std::make_unique<Flake>(getFlake(state, topRef, useRegistries, {}, dependency));
 
     if (lockFlags.applyNixConfig) {
         flake->config.apply();
@@ -440,6 +444,8 @@ LockedFlake lockFlake(
                        flakerefs relative to the parent flake. */
                     auto getInputFlake = [&]()
                     {
+		        std::cerr << "processing input";
+			   
                         if (auto relativePath = input.ref->input.isRelative()) {
                             SourcePath inputSourcePath {
                                 overridenSourcePath.accessor,
@@ -460,6 +466,7 @@ LockedFlake lockFlake(
                         if (auto oldLock2 = get(oldNode->inputs, id))
                             if (auto oldLock3 = std::get_if<0>(&*oldLock2))
                                 oldLock = *oldLock3;
+		    std::cerr << "computing lock!";
 
                     if (oldLock
                         && oldLock->originalRef == *input.ref

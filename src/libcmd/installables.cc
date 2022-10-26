@@ -669,7 +669,7 @@ std::tuple<std::string, FlakeRef, InstallableValue::DerivationInfo> InstallableF
         .priority = priority,
     };
 
-    return {attrPath, getLockedFlake()->flake.lockedRef, std::move(drvInfo)};
+    return {attrPath, getLockedFlake(true)->flake.lockedRef, std::move(drvInfo)};
 }
 
 std::vector<InstallableValue::DerivationInfo> InstallableFlake::toDerivations()
@@ -736,19 +736,19 @@ ref<eval_cache::AttrCursor> InstallableFlake::getCursor(EvalState & state)
         showAttrPaths(attrPaths));
 }
 
-std::shared_ptr<flake::LockedFlake> InstallableFlake::getLockedFlake() const
+std::shared_ptr<flake::LockedFlake> InstallableFlake::getLockedFlake(bool dependency) const
 {
     if (!_lockedFlake) {
         flake::LockFlags lockFlagsApplyConfig = lockFlags;
         lockFlagsApplyConfig.applyNixConfig = true;
-        _lockedFlake = std::make_shared<flake::LockedFlake>(lockFlake(*state, flakeRef, lockFlagsApplyConfig));
+        _lockedFlake = std::make_shared<flake::LockedFlake>(lockFlake(*state, flakeRef, lockFlagsApplyConfig, dependency));
     }
     return _lockedFlake;
 }
 
 FlakeRef InstallableFlake::nixpkgsFlakeRef() const
 {
-    auto lockedFlake = getLockedFlake();
+    auto lockedFlake = getLockedFlake(true);
 
     if (auto nixpkgsInput = lockedFlake->lockFile.findInput({"nixpkgs"})) {
         if (auto lockedNode = std::dynamic_pointer_cast<const flake::LockedNode>(nixpkgsInput)) {

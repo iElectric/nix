@@ -133,7 +133,8 @@ struct LockFlags
 LockedFlake lockFlake(
     EvalState & state,
     const FlakeRef & flakeRef,
-    const LockFlags & lockFlags);
+    const LockFlags & lockFlags,
+    bool dependency = false);
 
 void callFlake(
     EvalState & state,

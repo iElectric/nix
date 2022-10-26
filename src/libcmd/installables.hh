@@ -194,7 +194,7 @@ struct InstallableFlake : InstallableValue
        exists, or throw an exception with suggestions if none exists. */
     ref<eval_cache::AttrCursor> getCursor(EvalState & state) override;
 
-    std::shared_ptr<flake::LockedFlake> getLockedFlake() const;
+    std::shared_ptr<flake::LockedFlake> getLockedFlake(bool dependency = false) const;
 
     FlakeRef nixpkgsFlakeRef() const override;
 };
