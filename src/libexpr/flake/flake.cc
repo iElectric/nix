@@ -16,14 +16,7 @@ namespace flake {
 
 static void forceTrivialValue(EvalState & state, Value & value, const PosIdx pos)
 {
-    if (!value.isThunk())
-        return;
-
-    if (value.isTrivial())
-        state.forceValue(value, pos);
-    else
-        throw Error("The expression at %s is %s, which may not terminate.",
-                    state.positions[value.determinePos(pos)], showType(value));
+    state.forceValue(value, pos);
 }
 
 static void expectType(EvalState & state, ValueType type,
