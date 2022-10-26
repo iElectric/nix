@@ -74,8 +74,7 @@ static std::tuple<fetchers::Tree, FlakeRef, FlakeRef> fetchOrSubstituteTree(
 
 static void forceTrivialValue(EvalState & state, Value & value, const PosIdx pos)
 {
-    if (value.isThunk() && value.isTrivial())
-        state.forceValue(value, pos);
+    state.forceValue(value, pos);
 }
 
 
