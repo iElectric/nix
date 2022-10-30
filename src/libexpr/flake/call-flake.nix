@@ -55,8 +55,12 @@ let
           # With overrides, the accessor already points to the right subdirectory.
           subdir = if overrides ? ${key} then "" else node.locked.dir or "";
 
+          flakeParent = sourceInfo.outPath + ((if subdir != "" then "/" else "") + subdir);
+
+          file = if builtins.pathExists (flakeParent + "/.devenv.flake.nix") then "/.devenv.flake.nix" else "/flake.nix";
+
           flake =
-            import (sourceInfo.outPath + ((if subdir != "" then "/" else "") + subdir + "/flake.nix"));
+            import (flakeParent + file);
 
           inputs = builtins.mapAttrs
             (inputName: inputSpec: allNodes.${resolveInput inputSpec})

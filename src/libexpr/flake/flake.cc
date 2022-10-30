@@ -147,16 +147,19 @@ static Flake readFlake(
     bool dependencyOperation = false)
 {
     CanonPath flakeDir(resolvedRef.subdir);
-    char * suffix = getenv("FLAKE_FILE");
-    if (!suffix || dependencyOperation) {
-        suffix = "flake.nix";
-    }
-    auto flakePath = rootDir + flakeDir + suffix;
 
-    //std::cerr << flakePath;
-    //std::cerr << boost::stacktrace::stacktrace();
-    if (!flakePath.pathExists())
-        throw Error("flake '%s' does not exist", flakePath);
+    auto flakeNixPath = rootDir + flakeDir + "flake.nix";
+    auto devEnvPath = rootDir + flakeDir + ".devenv.flake.nix";
+    auto flakePath = devEnvPath;
+
+    // check if devEnvPath exists and it not use flakeNixPath
+    if (devEnvPath.pathExists()) {
+      flakePath = devEnvPath;
+    } else if (flakeNixPath.pathExists()) {
+      flakePath = flakeNixPath;
+    } else {
+      throw Error("flake '%s' does not exist", flakeNixPath);
+    }
 
     Value vInfo;
     state.evalFile(flakePath, vInfo, true);
@@ -286,14 +289,16 @@ Flake getFlake(EvalState & state, const FlakeRef & originalRef, bool useRegistri
 
 static LockFile readLockFile(const Flake & flake, bool dependencyOperation = false)
 {
-    char * suffix = getenv("FLAKE_LOCK");
-    if (!suffix || dependencyOperation) {
-        suffix = "flake.lock";
+    auto flakeLockFilePath = flake.path.parent() + "flake.lock";
+    auto devenvLockFilePath = flake.path.parent() + "devenv.lock";
+
+    if (devenvLockFilePath.pathExists()) {
+      return LockFile(devenvLockFilePath.readFile(), fmt("%s", devenvLockFilePath));
+    } else if (flakeLockFilePath.pathExists()) {
+      return LockFile(flakeLockFilePath.readFile(), fmt("%s", flakeLockFilePath));
+    } else {
+      return LockFile();
     }
-    auto lockFilePath = flake.path.parent() + suffix;
-    return lockFilePath.pathExists()
-        ? LockFile(lockFilePath.readFile(), fmt("%s", lockFilePath))
-        : LockFile();
 }
 
 /* Compute an in-memory lock file for the specified top-level flake,
@@ -336,6 +341,7 @@ LockedFlake lockFlake(
         LockFile newLockFile;
 
         std::vector<FlakeRef> parents;
+
 
         std::function<void(
             const FlakeInputs & flakeInputs,
@@ -445,7 +451,7 @@ LockedFlake lockFlake(
                     auto getInputFlake = [&]()
                     {
 		        std::cerr << "processing input";
-			   
+
                         if (auto relativePath = input.ref->input.isRelative()) {
                             SourcePath inputSourcePath {
                                 overridenSourcePath.accessor,
@@ -651,11 +657,7 @@ LockedFlake lockFlake(
                     if (!lockFlags.updateLockFile)
                         throw Error("flake '%s' requires lock file changes but they're not allowed due to '--no-update-lock-file'", topRef);
 
-                    char * suffix = getenv("FLAKE_LOCK");
-                    if (!suffix) {
-                        suffix = "flake.lock";
-                    }
-                    auto path = flake->path.parent() + suffix;
+                    auto path = flake->path.parent() + "devenv.lock";
 
                     bool lockFileExists = path.pathExists();
 
