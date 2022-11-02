@@ -158,7 +158,7 @@ static Flake readFlake(
     } else if (flakeNixPath.pathExists()) {
       flakePath = flakeNixPath;
     } else {
-      throw Error("flake '%s' does not exist", flakeNixPath);
+      throw Error("flake '%s' does not exist", devEnvPath);
     }
 
     Value vInfo;
