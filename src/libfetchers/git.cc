@@ -372,16 +372,15 @@ struct GitInputScheme : InputScheme
                 if (repoInfo.hasHead) {
                     // Using git diff is preferrable over lower-level operations here,
                     // because it's conceptually simpler and we only need the exit code anyways.
-                    auto gitDiffOpts = Strings({ "-C", repoInfo.url, "--git-dir", repoInfo.gitDir, "diff", "HEAD", "--quiet"});
+                    auto gitDiffOpts = Strings({ "-C", repoInfo.url, "--git-dir", repoInfo.gitDir, "status", "--short"});
                     if (!repoInfo.submodules) {
                         // Changes in submodules should only make the tree dirty
                         // when those submodules will be copied as well.
                         gitDiffOpts.emplace_back("--ignore-submodules");
                     }
                     gitDiffOpts.emplace_back("--");
-                    runProgram("git", true, gitDiffOpts);
 
-                    repoInfo.isDirty = false;
+                    repoInfo.isDirty = (chomp(runProgram("git", true, gitDiffOpts)) == "");
                 }
             } catch (ExecError & e) {
                 if (!WIFEXITED(e.status) || WEXITSTATUS(e.status) != 1) throw;
@@ -393,7 +392,7 @@ struct GitInputScheme : InputScheme
 
     std::set<CanonPath> listFiles(const RepoInfo & repoInfo) const
     {
-        auto gitOpts = Strings({ "-C", repoInfo.url, "--git-dir", repoInfo.gitDir, "ls-files", "-z" });
+        auto gitOpts = Strings({ "-C", repoInfo.url, "--git-dir", repoInfo.gitDir, "ls-files", "--cached", "-z" , "--others"});
         if (repoInfo.submodules)
             gitOpts.emplace_back("--recurse-submodules");
 
