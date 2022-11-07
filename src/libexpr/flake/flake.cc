@@ -1,5 +1,4 @@
 #include "flake.hh"
-#include <boost/stacktrace.hpp>
 #include "eval.hh"
 #include "lockfile.hh"
 #include "primops.hh"
