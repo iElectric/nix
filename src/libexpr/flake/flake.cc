@@ -157,7 +157,7 @@ static Flake readFlake(
     } else if (flakeNixPath.pathExists()) {
       flakePath = flakeNixPath;
     } else {
-      throw Error("flake '%s' does not exist", devEnvPath);
+      throw Error("flake '%s' does not exist. If you're looking to import devenv.nix, set inputs.myinput.flake to false. See https://devenv.sh/reference/yaml-options/", flakeNixPath);
     }
 
     Value vInfo;
