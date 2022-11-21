@@ -449,7 +449,6 @@ LockedFlake lockFlake(
                        flakerefs relative to the parent flake. */
                     auto getInputFlake = [&]()
                     {
-		        std::cerr << "processing input";
 
                         if (auto relativePath = input.ref->input.isRelative()) {
                             SourcePath inputSourcePath {
@@ -471,7 +470,6 @@ LockedFlake lockFlake(
                         if (auto oldLock2 = get(oldNode->inputs, id))
                             if (auto oldLock3 = std::get_if<0>(&*oldLock2))
                                 oldLock = *oldLock3;
-		    std::cerr << "computing lock!";
 
                     if (oldLock
                         && oldLock->originalRef == *input.ref
