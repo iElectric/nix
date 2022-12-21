@@ -328,10 +328,8 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
                     oss << noSource;
             }
         }
-        oss << "\n" << prefix;
     }
 
-    oss << einfo.msg << "\n";
 
     if (einfo.errPos) {
         oss << "\n" << ANSI_BLUE << "at " ANSI_WARNING << *einfo.errPos << ANSI_NORMAL << ":";
@@ -344,11 +342,15 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
             oss << noSource;
     }
 
+    oss << "\n" << prefix << einfo.msg << "\n";
+
     auto suggestions = einfo.suggestions.trim();
     if (!suggestions.suggestions.empty()) {
+        oss << "\n";
         oss << "Did you mean " <<
             suggestions.trim() <<
             "?" << std::endl;
+        oss << "\n";
     }
 
     out << indent(prefix, std::string(filterANSIEscapes(prefix, true).size(), ' '), chomp(oss.str()));
