@@ -202,8 +202,6 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
     // traces
     if (showTrace && !einfo.traces.empty()) {
         for (auto iter = einfo.traces.begin(); iter != einfo.traces.end(); ++iter) {
-            oss << "\n" << "… " << iter->hint.str() << "\n";
-
             if (iter->pos) {
                 oss << "\n" << ANSI_BLUE << "at " ANSI_WARNING << *iter->pos << ANSI_NORMAL << ":";
 
@@ -214,11 +212,10 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
                 } else
                     oss << noSource;
             }
+
+            oss << "\n" << "… " << iter->hint.str() << "\n";
         }
     }
-
-    oss << einfo.msg << "\n";
-
 
     if (einfo.errPos) {
         oss << "\n" << ANSI_BLUE << "at " ANSI_WARNING << *einfo.errPos << ANSI_NORMAL << ":";
@@ -231,11 +228,15 @@ std::ostream & showErrorInfo(std::ostream & out, const ErrorInfo & einfo, bool s
             oss << noSource;
     }
 
+    oss << "\n" << prefix << einfo.msg << "\n";
+
     auto suggestions = einfo.suggestions.trim();
     if (! suggestions.suggestions.empty()){
+        oss << "\n";
         oss << "Did you mean " <<
             suggestions.trim() <<
             "?" << std::endl;
+        oss << "\n";
     }
 
     out << indent(prefix, std::string(filterANSIEscapes(prefix, true).size(), ' '), chomp(oss.str()));
