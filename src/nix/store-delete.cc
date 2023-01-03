@@ -9,7 +9,7 @@ using namespace nix;
 
 struct CmdStoreDelete : StorePathsCommand
 {
-    GCOptions options { .action = GCOptions::gcDeleteSpecific };
+    GCOptions options { .action = GCOptions::gcDeleteDead };
 
     CmdStoreDelete()
     {

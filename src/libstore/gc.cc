@@ -765,11 +765,11 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
 
     /* Either delete all garbage paths, or just the specified
        paths (for gcDeleteSpecific). */
-    if (options.action == GCOptions::gcDeleteSpecific) {
+    if (options.action == GCOptions::gcDeleteSpecific || options.action == GCOptions::gcDeleteDead) {
 
         for (auto & i : options.pathsToDelete) {
             deleteReferrersClosure(i);
-            if (!dead.count(i))
+            if (options.action == GCOptions::gcDeleteSpecific && !dead.count(i))
                 throw Error(
                     "Cannot delete path '%1%' since it is still alive. "
                     "To find out why, use: "
