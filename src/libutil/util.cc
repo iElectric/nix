@@ -27,6 +27,8 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <boost/stacktrace.hpp>
+
 
 #ifdef __APPLE__
 #include <sys/syscall.h>
@@ -110,6 +112,8 @@ Path absPath(Path path, std::optional<PathView> dir, bool resolveSymlinks)
 
 Path canonPath(PathView path, bool resolveSymlinks)
 {
+    if (path == "")
+      std::cerr << boost::stacktrace::stacktrace();
     assert(path != "");
 
     std::string s;
