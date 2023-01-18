@@ -126,10 +126,10 @@
           ++ lib.optional stdenv.hostPlatform.isx86_64 libcpuid;
 
         awsDeps = lib.optional (stdenv.isLinux || stdenv.isDarwin)
-          (aws-sdk-cpp.override {
+          ((aws-sdk-cpp.override {
             apis = ["s3" "transfer"];
             customMemoryManagement = false;
-          });
+          }).overrideAttrs (drv: { cmakeFlags = ["-DAUTORUN_UNIT_TESTS=OFF"] ++ drv.cmakeFlags; }));
 
         propagatedDeps =
           [ (boehmgc.override {
