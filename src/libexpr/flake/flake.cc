@@ -145,7 +145,19 @@ static Flake readFlake(
     const InputPath & lockRootPath)
 {
     CanonPath flakeDir(resolvedRef.subdir);
-    auto flakePath = rootDir + flakeDir + "flake.nix";
+
+    auto flakeNixPath = rootDir + flakeDir + "flake.nix";
+    auto devEnvPath = rootDir + flakeDir + ".devenv.flake.nix";
+    auto flakePath = devEnvPath;
+
+    // check if devEnvPath exists and it not use flakeNixPath
+    if (devEnvPath.pathExists()) {
+      flakePath = devEnvPath;
+    } else if (flakeNixPath.pathExists()) {
+      flakePath = flakeNixPath;
+    } else {
+      throw Error("flake '%s' does not exist", devEnvPath);
+    }
 
     Value vInfo;
     state.evalFile(flakePath, vInfo, true);
@@ -274,10 +286,16 @@ Flake getFlake(EvalState & state, const FlakeRef & originalRef, bool useRegistri
 
 static LockFile readLockFile(const Flake & flake)
 {
-    auto lockFilePath = flake.path.parent() + "flake.lock";
-    return lockFilePath.pathExists()
-        ? LockFile(lockFilePath.readFile(), fmt("%s", lockFilePath))
-        : LockFile();
+    auto flakeLockFilePath = flake.path.parent() + "flake.lock";
+    auto devenvLockFilePath = flake.path.parent() + "devenv.lock";
+
+    if (devenvLockFilePath.pathExists()) {
+      return LockFile(devenvLockFilePath.readFile(), fmt("%s", devenvLockFilePath));
+    } else if (flakeLockFilePath.pathExists()) {
+      return LockFile(flakeLockFilePath.readFile(), fmt("%s", flakeLockFilePath));
+    } else {
+      return LockFile();
+    }
 }
 
 /* Compute an in-memory lock file for the specified top-level flake,
@@ -319,6 +337,7 @@ LockedFlake lockFlake(
         LockFile newLockFile;
 
         std::vector<FlakeRef> parents;
+
 
         std::function<void(
             const FlakeInputs & flakeInputs,
@@ -646,7 +665,7 @@ LockedFlake lockFlake(
                     if (!lockFlags.updateLockFile)
                         throw Error("flake '%s' requires lock file changes but they're not allowed due to '--no-update-lock-file'", topRef);
 
-                    auto path = flake->path.parent() + "flake.lock";
+                    auto path = flake->path.parent() + "devenv.lock";
 
                     bool lockFileExists = path.pathExists();
 
