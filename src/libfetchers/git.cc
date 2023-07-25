@@ -217,6 +217,10 @@ std::pair<StorePath, Input> fetchFromWorkdir(ref<Store> store, Input & input, co
     auto files = tokenizeString<std::set<std::string>>(
         runProgram("git", true, gitOpts), "\0"s);
 
+    if (pathExists(".devenv.flake.nix")) {
+	    files.insert(CanonPath(".devenv.flake.nix"));
+	}
+
     Path actualPath(absPath(workdir));
 
     PathFilter filter = [&](const Path & p) -> bool {
