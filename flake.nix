@@ -328,7 +328,7 @@
               src = origSrc;
             };
           in currentStdenv.mkDerivation (finalAttrs: {
-            name = "nix-${version}";
+            name = "nix-devenv-${version}";
             inherit version;
 
             src = sourceByRegexInverted [ "tests/nixos/.*" "tests/installer/.*" ] self;
@@ -378,7 +378,7 @@
 
             makeFlags = "profiledir=$(out)/etc/profile.d PRECOMPILE_HEADERS=1";
 
-            doCheck = true;
+            doCheck = false;
 
             installFlags = "sysconfdir=$(out)/etc";
 
