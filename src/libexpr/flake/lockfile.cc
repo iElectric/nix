@@ -34,25 +34,22 @@ LockedNode::LockedNode(const nlohmann::json & json)
     : lockedRef(getFlakeRef(json, "locked", "info")) // FIXME: remove "info"
     , originalRef(getFlakeRef(json, "original", nullptr))
     , isFlake(json.find("flake") != json.end() ? (bool) json["flake"] : true)
+    , parentPath(json.find("parent") != json.end() ? (std::optional<InputPath>) json["parent"] : std::nullopt)
+    , patchFiles(json.find("patchFiles") != json.end() ? (std::vector<std::string>) json["patchFiles"] : std::vector<std::string>{})
 {
-    if (!lockedRef.input.isLocked())
-        throw Error("lock file contains mutable lock '%s'",
+    if (!lockedRef.input.isLocked() && !lockedRef.input.isRelative())
+        throw Error("lock file contains unlocked input '%s'",
             fetchers::attrsToJSON(lockedRef.input.toAttrs()));
-}
-
-StorePath LockedNode::computeStorePath(Store & store) const
-{
-    return lockedRef.input.computeStorePath(store);
 }
 
 std::shared_ptr<Node> LockFile::findInput(const InputPath & path)
 {
-    auto pos = root;
+    std::shared_ptr<Node> pos = root;
 
     for (auto & elem : path) {
         if (auto i = get(pos->inputs, elem)) {
             if (auto node = std::get_if<0>(&*i))
-                pos = *node;
+                pos = (std::shared_ptr<LockedNode>) *node;
             else if (auto follows = std::get_if<1>(&*i)) {
                 if (auto p = findInput(*follows))
                     pos = ref(p);
@@ -66,8 +63,10 @@ std::shared_ptr<Node> LockFile::findInput(const InputPath & path)
     return pos;
 }
 
-LockFile::LockFile(const nlohmann::json & json, const Path & path)
+LockFile::LockFile(std::string_view contents, std::string_view path)
 {
+    auto json = nlohmann::json::parse(contents);
+
     auto version = json.value("version", 0);
     if (version < 5 || version > 7)
         throw Error("lock file '%s' has unsupported version %d", path, version);
@@ -116,10 +115,10 @@ LockFile::LockFile(const nlohmann::json & json, const Path & path)
     // a bit since we don't need to worry about cycles.
 }
 
-nlohmann::json LockFile::toJSON() const
+std::pair<nlohmann::json, LockFile::KeyMap> LockFile::toJSON() const
 {
     nlohmann::json nodes;
-    std::unordered_map<std::shared_ptr<const Node>, std::string> nodeKeys;
+    KeyMap nodeKeys;
     std::unordered_set<std::string> keys;
 
     std::function<std::string(const std::string & key, ref<const Node> node)> dumpNode;
@@ -164,6 +163,10 @@ nlohmann::json LockFile::toJSON() const
             n["locked"] = fetchers::attrsToJSON(lockedNode->lockedRef.toAttrs());
             if (!lockedNode->isFlake)
                 n["flake"] = false;
+            if (lockedNode->parentPath)
+                n["parent"] = *lockedNode->parentPath;
+            if (!lockedNode->patchFiles.empty())
+                n["patchFiles"] = lockedNode->patchFiles;
         }
 
         nodes[key] = std::move(n);
@@ -176,30 +179,19 @@ nlohmann::json LockFile::toJSON() const
     json["root"] = dumpNode("root", root);
     json["nodes"] = std::move(nodes);
 
-    return json;
+    return {json, std::move(nodeKeys)};
 }
 
-std::string LockFile::to_string() const
+std::pair<std::string, LockFile::KeyMap> LockFile::to_string() const
 {
-    return toJSON().dump(2);
-}
-
-LockFile LockFile::read(const Path & path)
-{
-    if (!pathExists(path)) return LockFile();
-    return LockFile(nlohmann::json::parse(readFile(path)), path);
+    auto [json, nodeKeys] = toJSON();
+    return {json.dump(2), std::move(nodeKeys)};
 }
 
 std::ostream & operator <<(std::ostream & stream, const LockFile & lockFile)
 {
-    stream << lockFile.toJSON().dump(2);
+    stream << lockFile.toJSON().first.dump(2);
     return stream;
-}
-
-void LockFile::write(const Path & path) const
-{
-    createDirs(dirOf(path));
-    writeFile(path, fmt("%s\n", *this));
 }
 
 std::optional<FlakeRef> LockFile::isUnlocked() const
@@ -221,7 +213,9 @@ std::optional<FlakeRef> LockFile::isUnlocked() const
     for (auto & i : nodes) {
         if (i == ref<const Node>(root)) continue;
         auto node = i.dynamic_pointer_cast<const LockedNode>();
-        if (node && !node->lockedRef.input.isLocked())
+        if (node
+            && !node->lockedRef.input.isLocked()
+            && !node->lockedRef.input.isRelative())
             return node->lockedRef;
     }
 
@@ -231,7 +225,7 @@ std::optional<FlakeRef> LockFile::isUnlocked() const
 bool LockFile::operator ==(const LockFile & other) const
 {
     // FIXME: slow
-    return toJSON() == other.toJSON();
+    return toJSON().first == other.toJSON().first;
 }
 
 bool LockFile::operator !=(const LockFile & other) const

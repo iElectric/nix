@@ -2,7 +2,7 @@ let
   inherit (builtins)
     attrNames attrValues fromJSON listToAttrs mapAttrs
     concatStringsSep concatMap length lessThan replaceStrings sort;
-  inherit (import ./utils.nix) concatStrings optionalString filterAttrs trim squash unique showSettings;
+  inherit (import <nix/utils.nix>) concatStrings optionalString filterAttrs trim squash unique showSettings;
 in
 
 commandDump:

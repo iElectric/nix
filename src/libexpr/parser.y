@@ -22,6 +22,7 @@
 
 #include "nixexpr.hh"
 #include "eval.hh"
+#include "eval-settings.hh"
 #include "globals.hh"
 
 namespace nix {
@@ -323,6 +324,10 @@ void yyerror(YYLTYPE * loc, yyscan_t scanner, ParseData * data, const char * err
   std::vector<nix::AttrName> * attrNames;
   std::vector<std::pair<nix::PosIdx, nix::Expr *>> * string_parts;
   std::vector<std::pair<nix::PosIdx, std::variant<nix::Expr *, StringToken>>> * ind_string_parts;
+  struct {
+      nix::Expr * e;
+      bool appendSlash;
+  } pathStart;
 }
 
 %type <e> start expr expr_function expr_if expr_op
@@ -334,7 +339,8 @@ void yyerror(YYLTYPE * loc, yyscan_t scanner, ParseData * data, const char * err
 %type <attrNames> attrs attrpath
 %type <string_parts> string_parts_interpolated
 %type <ind_string_parts> ind_string_parts
-%type <e> path_start string_parts string_attr
+%type <pathStart> path_start
+%type <e> string_parts string_attr
 %type <id> attr
 %token <id> ID
 %token <str> STR IND_STR
@@ -462,9 +468,11 @@ expr_simple
       $$ = stripIndentation(CUR_POS, data->symbols, std::move(*$2));
       delete $2;
   }
-  | path_start PATH_END
+  | path_start PATH_END { $$ = $1.e; }
   | path_start string_parts_interpolated PATH_END {
-      $2->insert($2->begin(), {makeCurPos(@1, data), $1});
+      if ($1.appendSlash)
+          $2->insert($2->begin(), {noPos, new ExprString("/")});
+      $2->insert($2->begin(), {makeCurPos(@1, data), $1.e});
       $$ = new ExprConcatStrings(CUR_POS, false, $2);
   }
   | SPATH {
@@ -515,11 +523,17 @@ string_parts_interpolated
 
 path_start
   : PATH {
-    Path path(absPath({$1.p, $1.l}, data->basePath.path.abs()));
-    /* add back in the trailing '/' to the first segment */
-    if ($1.p[$1.l-1] == '/' && $1.l > 1)
-      path += "/";
-    $$ = new ExprPath(path);
+      std::string_view path({$1.p, $1.l});
+      $$ = {
+          .e = new ExprPath(
+              /* Absolute paths are always interpreted relative to the
+                 root filesystem accessor, rather than the accessor of the
+                 current Nix expression. */
+              hasPrefix(path, "/")
+              ? SourcePath{data->state.rootFS, CanonPath(path)}
+              : SourcePath{data->basePath.accessor, CanonPath(path, data->basePath.path)}),
+          .appendSlash = hasSuffix(path, "/")
+      };
   }
   | HPATH {
     if (evalSettings.pureEval) {
@@ -528,8 +542,8 @@ path_start
             std::string_view($1.p, $1.l)
         );
     }
-    Path path(getHome() + std::string($1.p + 1, $1.l - 1));
-    $$ = new ExprPath(path);
+    CanonPath path(getHome() + std::string($1.p + 1, $1.l - 1));
+    $$ = {.e = new ExprPath(data->state.rootPath(path)), .appendSlash = true};
   }
   ;
 
@@ -646,6 +660,8 @@ formal
 #include "eval.hh"
 #include "filetransfer.hh"
 #include "fetchers.hh"
+#include "fs-input-accessor.hh"
+#include "tarball.hh"
 #include "store-api.hh"
 #include "flake/flake.hh"
 
@@ -759,12 +775,12 @@ SourcePath EvalState::findFile(const SearchPath & searchPath, const std::string_
         if (!rOpt) continue;
         auto r = *rOpt;
 
-        Path res = suffix == "" ? r : concatStrings(r, "/", suffix);
-        if (pathExists(res)) return CanonPath(canonPath(res));
+        auto res = r + CanonPath(suffix);
+        if (res.pathExists()) return res;
     }
 
     if (hasPrefix(path, "nix/"))
-        return CanonPath(concatStrings(corepkgsPrefix, path.substr(4)));
+        return {corepkgsFS, CanonPath(path.substr(3))};
 
     debugThrow(ThrownError({
         .msg = hintfmt(evalSettings.pureEval
@@ -776,24 +792,25 @@ SourcePath EvalState::findFile(const SearchPath & searchPath, const std::string_
 }
 
 
-std::optional<std::string> EvalState::resolveSearchPathPath(const SearchPath::Path & value0)
+std::optional<SourcePath> EvalState::resolveSearchPathPath(const SearchPath::Path & value0, bool initAccessControl)
 {
     auto & value = value0.s;
     auto i = searchPathResolved.find(value);
     if (i != searchPathResolved.end()) return i->second;
 
-    std::optional<std::string> res;
+    std::optional<SourcePath> res;
 
     if (EvalSettings::isPseudoUrl(value)) {
         try {
             auto storePath = fetchers::downloadTarball(
-                store, EvalSettings::resolvePseudoUrl(value), "source", false).tree.storePath;
-            res = { store->toRealPath(storePath) };
+                store, EvalSettings::resolvePseudoUrl(value), "source", false).storePath;
+            auto accessor = makeStorePathAccessor(store, storePath);
+            registerAccessor(accessor);
+            res.emplace(accessor->root());
         } catch (FileTransferError & e) {
             logWarning({
                 .msg = hintfmt("Nix search path entry '%1%' cannot be downloaded, ignoring", value)
             });
-            res = std::nullopt;
         }
     }
 
@@ -801,28 +818,39 @@ std::optional<std::string> EvalState::resolveSearchPathPath(const SearchPath::Pa
         experimentalFeatureSettings.require(Xp::Flakes);
         auto flakeRef = parseFlakeRef(value.substr(6), {}, true, false);
         debug("fetching flake search path element '%s''", value);
-        auto storePath = flakeRef.resolve(store).fetchTree(store).first.storePath;
-        res = { store->toRealPath(storePath) };
+        auto [accessor, _] = flakeRef.resolve(store).lazyFetch(store);
+        res.emplace(accessor->root());
     }
 
     else {
-        auto path = absPath(value);
-        if (pathExists(path))
-            res = { path };
+        auto path = rootPath(CanonPath::fromCwd(value));
+
+        /* Allow access to paths in the search path. */
+        if (initAccessControl) {
+            allowPath(path.path.abs());
+            if (store->isInStore(path.path.abs())) {
+                try {
+                    StorePathSet closure;
+                    store->computeFSClosure(store->toStorePath(path.path.abs()).first, closure);
+                    for (auto & p : closure)
+                        allowPath(p);
+                } catch (InvalidPath &) { }
+            }
+        }
+
+        if (path.pathExists())
+            res.emplace(path);
         else {
             logWarning({
                 .msg = hintfmt("Nix search path entry '%1%' does not exist, ignoring", value)
             });
-            res = std::nullopt;
         }
     }
 
     if (res)
         debug("resolved search path element '%s' to '%s'", value, *res);
-    else
-        debug("failed to resolve search path element '%s'", value);
 
-    searchPathResolved[value] = res;
+    searchPathResolved.emplace(value, res);
     return res;
 }
 

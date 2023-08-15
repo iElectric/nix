@@ -51,6 +51,7 @@ struct FlakeInput
     bool isFlake = true;
     std::optional<InputPath> follows;
     FlakeInputs overrides;
+    std::vector<std::string> patchFiles;
 };
 
 struct ConfigFile
@@ -80,17 +81,26 @@ struct Flake
      */
     FlakeRef lockedRef;
     /**
+     * The path of `flake.nix`.
+     */
+    SourcePath path;
+    /**
      * pretend that 'lockedRef' is dirty
      */
     bool forceDirty = false;
     std::optional<std::string> description;
-    std::shared_ptr<const fetchers::Tree> sourceInfo;
     FlakeInputs inputs;
     /**
      * 'nixConfig' attribute
      */
     ConfigFile config;
+
     ~Flake();
+
+    SourcePath lockFilePath()
+    {
+        return path.parent() + "flake.lock";
+    }
 };
 
 Flake getFlake(EvalState & state, const FlakeRef & flakeRef, bool allowLookup);
@@ -105,7 +115,12 @@ struct LockedFlake
     Flake flake;
     LockFile lockFile;
 
-    Fingerprint getFingerprint() const;
+    /* Source tree accessors for nodes that have been fetched in
+       lockFlake(); in particular, the root node and the overriden
+       inputs. */
+    std::map<ref<Node>, SourcePath> nodePaths;
+
+    std::optional<Fingerprint> getFingerprint(ref<Store> store) const;
 };
 
 struct LockFlags
@@ -160,12 +175,12 @@ struct LockFlags
     /**
      * The path to a lock file to read instead of the `flake.lock` file in the top-level flake
      */
-    std::optional<std::string> referenceLockFilePath;
+    std::optional<SourcePath> referenceLockFilePath;
 
     /**
      * The path to a lock file to write to instead of the `flake.lock` file in the top-level flake
      */
-    std::optional<Path> outputLockFilePath;
+    std::optional<SourcePath> outputLockFilePath;
 
     /**
      * Flake inputs to be overridden.
@@ -193,7 +208,7 @@ void callFlake(
 
 void emitTreeAttrs(
     EvalState & state,
-    const fetchers::Tree & tree,
+    const SourcePath & path,
     const fetchers::Input & input,
     Value & v,
     bool emptyRevFallback = false,

@@ -1,3 +1,4 @@
+#include "eval-settings.hh"
 #include "common-eval-args.hh"
 #include "shared.hh"
 #include "filetransfer.hh"
@@ -8,6 +9,8 @@
 #include "flake/flakeref.hh"
 #include "store-api.hh"
 #include "command.hh"
+#include "fs-input-accessor.hh"
+#include "tarball.hh"
 
 namespace nix {
 
@@ -167,15 +170,17 @@ SourcePath lookupFileArg(EvalState & state, std::string_view s)
 {
     if (EvalSettings::isPseudoUrl(s)) {
         auto storePath = fetchers::downloadTarball(
-            state.store, EvalSettings::resolvePseudoUrl(s), "source", false).tree.storePath;
-        return state.rootPath(CanonPath(state.store->toRealPath(storePath)));
+            state.store, EvalSettings::resolvePseudoUrl(s), "source", false).storePath;
+        auto accessor = makeStorePathAccessor(state.store, storePath);
+        state.registerAccessor(accessor);
+        return accessor->root();
     }
 
     else if (hasPrefix(s, "flake:")) {
         experimentalFeatureSettings.require(Xp::Flakes);
         auto flakeRef = parseFlakeRef(std::string(s.substr(6)), {}, true, false);
-        auto storePath = flakeRef.resolve(state.store).fetchTree(state.store).first.storePath;
-        return state.rootPath(CanonPath(state.store->toRealPath(storePath)));
+        auto [accessor, _] = flakeRef.resolve(state.store).lazyFetch(state.store);
+        return accessor->root();
     }
 
     else if (s.size() > 2 && s.at(0) == '<' && s.at(s.size() - 1) == '>') {

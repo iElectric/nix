@@ -190,7 +190,11 @@ public:
             const char * * context; // must be in sorted order
         } string;
 
-        const char * _path;
+        struct {
+            InputAccessor * accessor;
+            const char * path;
+        } _path;
+
         Bindings * attrs;
         struct {
             size_t size;
@@ -287,11 +291,12 @@ public:
 
     void mkPath(const SourcePath & path);
 
-    inline void mkPath(const char * path)
+    inline void mkPath(InputAccessor * accessor, const char * path)
     {
         clearValue();
         internalType = tPath;
-        _path = path;
+        _path.accessor = accessor;
+        _path.path = path;
     }
 
     inline void mkNull()
@@ -438,7 +443,10 @@ public:
     SourcePath path() const
     {
         assert(internalType == tPath);
-        return SourcePath{CanonPath(_path)};
+        return SourcePath {
+            .accessor = ref(_path.accessor->shared_from_this()),
+            .path = CanonPath(CanonPath::unchecked_t(), _path.path)
+        };
     }
 
     std::string_view str() const

@@ -1,5 +1,6 @@
 #include "fetchers.hh"
 #include "store-api.hh"
+#include "input-accessor.hh"
 
 #include <nlohmann/json.hpp>
 
@@ -23,12 +24,8 @@ static void fixupInput(Input & input)
     // Check common attributes.
     input.getType();
     input.getRef();
-    if (input.getRev())
-        input.locked = true;
     input.getRevCount();
     input.getLastModified();
-    if (input.getNarHash())
-        input.locked = true;
 }
 
 Input Input::fromURL(const ParsedURL & url)
@@ -87,9 +84,21 @@ Attrs Input::toAttrs() const
     return attrs;
 }
 
-bool Input::hasAllInfo() const
+bool Input::isDirect() const
 {
-    return getNarHash() && scheme && scheme->hasAllInfo(*this);
+    assert(scheme);
+    return !scheme || scheme->isDirect(*this);
+}
+
+bool Input::isLocked() const
+{
+    return scheme && scheme->isLocked(*this);
+}
+
+std::optional<std::string> Input::isRelative() const
+{
+    assert(scheme);
+    return scheme->isRelative(*this);
 }
 
 bool Input::operator ==(const Input & other) const
@@ -107,75 +116,65 @@ bool Input::contains(const Input & other) const
     return false;
 }
 
-std::pair<Tree, Input> Input::fetch(ref<Store> store) const
+std::pair<StorePath, Input> Input::fetchToStore(ref<Store> store) const
 {
-    if (!scheme)
-        throw Error("cannot fetch unsupported input '%s'", attrsToJSON(toAttrs()));
-
-    /* The tree may already be in the Nix store, or it could be
-       substituted (which is often faster than fetching from the
-       original source). So check that. */
-    if (hasAllInfo()) {
-        try {
-            auto storePath = computeStorePath(*store);
-
-            store->ensurePath(storePath);
-
-            debug("using substituted/cached input '%s' in '%s'",
-                to_string(), store->printStorePath(storePath));
-
-            return {Tree { .actualPath = store->toRealPath(storePath), .storePath = std::move(storePath) }, *this};
-        } catch (Error & e) {
-            debug("substitution of input '%s' failed: %s", to_string(), e.what());
-        }
-    }
-
     auto [storePath, input] = [&]() -> std::pair<StorePath, Input> {
         try {
-            return scheme->fetch(store, *this);
+            auto [accessor, input2] = getAccessor(store);
+            auto storePath = accessor->root().fetchToStore(store, input2.getName());
+            return {storePath, input2};
         } catch (Error & e) {
             e.addTrace({}, "while fetching the input '%s'", to_string());
             throw;
         }
     }();
 
-    Tree tree {
-        .actualPath = store->toRealPath(storePath),
-        .storePath = storePath,
-    };
+    return {std::move(storePath), input};
+}
 
-    auto narHash = store->queryPathInfo(tree.storePath)->narHash;
-    input.attrs.insert_or_assign("narHash", narHash.to_string(SRI, true));
-
-    if (auto prevNarHash = getNarHash()) {
-        if (narHash != *prevNarHash)
-            throw Error((unsigned int) 102, "NAR hash mismatch in input '%s' (%s), expected '%s', got '%s'",
-                to_string(), tree.actualPath, prevNarHash->to_string(SRI, true), narHash.to_string(SRI, true));
+void InputScheme::checkLocks(const Input & specified, const Input & final) const
+{
+    if (auto prevNarHash = specified.getNarHash()) {
+        if (final.getNarHash() != prevNarHash)
+            throw Error((unsigned int) 102, "NAR hash mismatch in input '%s', expected '%s'",
+                specified.to_string(), prevNarHash->to_string(SRI, true));
     }
 
-    if (auto prevLastModified = getLastModified()) {
-        if (input.getLastModified() != prevLastModified)
+    if (auto prevLastModified = specified.getLastModified()) {
+        if (final.getLastModified() != prevLastModified)
             throw Error("'lastModified' attribute mismatch in input '%s', expected %d",
-                input.to_string(), *prevLastModified);
+                final.to_string(), *prevLastModified);
     }
 
-    if (auto prevRev = getRev()) {
-        if (input.getRev() != prevRev)
+    if (auto prevRev = specified.getRev()) {
+        if (final.getRev() != prevRev)
             throw Error("'rev' attribute mismatch in input '%s', expected %s",
-                input.to_string(), prevRev->gitRev());
+                final.to_string(), prevRev->gitRev());
     }
 
-    if (auto prevRevCount = getRevCount()) {
-        if (input.getRevCount() != prevRevCount)
+    if (auto prevRevCount = specified.getRevCount()) {
+        if (final.getRevCount() != prevRevCount)
             throw Error("'revCount' attribute mismatch in input '%s', expected %d",
-                input.to_string(), *prevRevCount);
+                final.to_string(), *prevRevCount);
     }
+}
 
-    input.locked = true;
+std::pair<ref<InputAccessor>, Input> Input::getAccessor(ref<Store> store) const
+{
+    // FIXME: cache the accessor
 
-    assert(input.hasAllInfo());
+    if (!scheme)
+        throw Error("cannot fetch unsupported input '%s'", attrsToJSON(toAttrs()));
 
-    return {std::move(tree), input};
+    try {
+        auto [accessor, final] = scheme->getAccessor(store, *this);
+        accessor->fingerprint = scheme->getFingerprint(store, final);
+        scheme->checkLocks(*this, final);
+        return {accessor, std::move(final)};
+    } catch (Error & e) {
+        e.addTrace({}, "while fetching the input '%s'", to_string());
+        throw;
+    }
 }
 
 Input Input::applyOverrides(
@@ -192,35 +191,18 @@ void Input::clone(const Path & destDir) const
     scheme->clone(*this, destDir);
 }
 
-std::optional<Path> Input::getSourcePath() const
-{
-    assert(scheme);
-    return scheme->getSourcePath(*this);
-}
-
-void Input::markChangedFile(
-    std::string_view file,
+void Input::putFile(
+    const CanonPath & path,
+    std::string_view contents,
     std::optional<std::string> commitMsg) const
 {
     assert(scheme);
-    return scheme->markChangedFile(*this, file, commitMsg);
+    return scheme->putFile(*this, path, contents, commitMsg);
 }
 
 std::string Input::getName() const
 {
     return maybeGetStrAttr(attrs, "name").value_or("source");
-}
-
-StorePath Input::computeStorePath(Store & store) const
-{
-    auto narHash = getNarHash();
-    if (!narHash)
-        throw Error("cannot compute store path for unlocked input '%s'", to_string());
-    return store.makeFixedOutputPath(getName(), FixedOutputInfo {
-        .method = FileIngestionMethod::Recursive,
-        .hash = *narHash,
-        .references = {},
-    });
 }
 
 std::string Input::getType() const
@@ -276,6 +258,11 @@ std::optional<time_t> Input::getLastModified() const
     return {};
 }
 
+std::optional<std::string> Input::getFingerprint(ref<Store> store) const
+{
+    return scheme ? scheme->getFingerprint(store, *this) : std::nullopt;
+}
+
 ParsedURL InputScheme::toURL(const Input & input) const
 {
     throw Error("don't know how to convert input '%s' to a URL", attrsToJSON(input.attrs));
@@ -293,19 +280,26 @@ Input InputScheme::applyOverrides(
     return input;
 }
 
-std::optional<Path> InputScheme::getSourcePath(const Input & input)
+void InputScheme::putFile(
+    const Input & input,
+    const CanonPath & path,
+    std::string_view contents,
+    std::optional<std::string> commitMsg) const
 {
-    return {};
-}
-
-void InputScheme::markChangedFile(const Input & input, std::string_view file, std::optional<std::string> commitMsg)
-{
-    assert(false);
+    throw Error("input '%s' does not support modifying file '%s'", input.to_string(), path);
 }
 
 void InputScheme::clone(const Input & input, const Path & destDir) const
 {
     throw Error("do not know how to clone input '%s'", input.to_string());
+}
+
+std::optional<std::string> InputScheme::getFingerprint(ref<Store> store, const Input & input) const
+{
+    if (auto rev = input.getRev())
+        return rev->gitRev();
+    else
+        return std::nullopt;
 }
 
 }

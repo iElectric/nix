@@ -3,6 +3,7 @@
 #include "command.hh"
 #include "common-args.hh"
 #include "eval.hh"
+#include "eval-settings.hh"
 #include "globals.hh"
 #include "legacy.hh"
 #include "shared.hh"
@@ -201,15 +202,12 @@ static void showHelp(std::vector<std::string> subcommand, NixArgs & toplevel)
     auto vGenerateManpage = state.allocValue();
     state.eval(state.parseExprFromString(
         #include "generate-manpage.nix.gen.hh"
-        , CanonPath::root), *vGenerateManpage);
+        , state.rootPath(CanonPath::root)), *vGenerateManpage);
 
-    auto vUtils = state.allocValue();
-    state.cacheFile(
-        CanonPath("/utils.nix"), CanonPath("/utils.nix"),
-        state.parseExprFromString(
-            #include "utils.nix.gen.hh"
-            , CanonPath::root),
-        *vUtils);
+    state.corepkgsFS->addFile(
+        CanonPath("utils.nix"),
+        #include "utils.nix.gen.hh"
+        );
 
     auto vDump = state.allocValue();
     vDump->mkString(toplevel.dumpCli());

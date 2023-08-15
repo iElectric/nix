@@ -12,3 +12,5 @@ error:
          at «none»:0: (source not available)
 
        error: string 'foo/bar' doesn't represent an absolute path
+
+       at «none»:0: (source not available)

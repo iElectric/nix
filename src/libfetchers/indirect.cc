@@ -41,7 +41,6 @@ struct IndirectInputScheme : InputScheme
         // FIXME: forbid query params?
 
         Input input;
-        input.direct = false;
         input.attrs.insert_or_assign("type", "indirect");
         input.attrs.insert_or_assign("id", id);
         if (rev) input.attrs.insert_or_assign("rev", rev->gitRev());
@@ -63,7 +62,6 @@ struct IndirectInputScheme : InputScheme
             throw BadURL("'%s' is not a valid flake ID", id);
 
         Input input;
-        input.direct = false;
         input.attrs = attrs;
         return input;
     }
@@ -78,11 +76,6 @@ struct IndirectInputScheme : InputScheme
         return url;
     }
 
-    bool hasAllInfo(const Input & input) const override
-    {
-        return false;
-    }
-
     Input applyOverrides(
         const Input & _input,
         std::optional<std::string> ref,
@@ -94,10 +87,13 @@ struct IndirectInputScheme : InputScheme
         return input;
     }
 
-    std::pair<StorePath, Input> fetch(ref<Store> store, const Input & input) override
+    std::pair<ref<InputAccessor>, Input> getAccessor(ref<Store> store, const Input & input) const override
     {
         throw Error("indirect input '%s' cannot be fetched directly", input.to_string());
     }
+
+    bool isDirect(const Input & input) const override
+    { return false; }
 };
 
 static auto rIndirectInputScheme = OnStartup([] { registerInputScheme(std::make_unique<IndirectInputScheme>()); });

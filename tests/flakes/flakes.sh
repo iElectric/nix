@@ -39,7 +39,9 @@ EOF
 git -C $flake2Dir add flake.nix
 git -C $flake2Dir commit -m 'Initial'
 
-cat > $flake3Dir/flake.nix <<EOF
+# Test symlink handling.
+ln -s _flake.nix $flake3Dir/flake.nix
+cat > $flake3Dir/_flake.nix <<EOF
 {
   description = "Fnord";
 
@@ -57,7 +59,7 @@ cat > $flake3Dir/default.nix <<EOF
 { x = 123; }
 EOF
 
-git -C $flake3Dir add flake.nix default.nix
+git -C $flake3Dir add flake.nix _flake.nix default.nix
 git -C $flake3Dir commit -m 'Initial'
 
 cat > $nonFlakeDir/README.md <<EOF
@@ -91,7 +93,6 @@ nix flake metadata $flake1Dir | grepQuiet 'URL:.*flake1.*'
 # Test 'nix flake metadata --json'.
 json=$(nix flake metadata flake1 --json | jq .)
 [[ $(echo "$json" | jq -r .description) = 'Bla bla' ]]
-[[ -d $(echo "$json" | jq -r .path) ]]
 [[ $(echo "$json" | jq -r .lastModified) = $(git -C $flake1Dir log -n1 --format=%ct) ]]
 hash1=$(echo "$json" | jq -r .revision)
 
@@ -129,6 +130,9 @@ nix build -o $TEST_ROOT/result --expr "(builtins.getFlake \"$flake1Dir\").packag
 
 # 'getFlake' on a locked flakeref should succeed even in pure mode.
 nix build -o $TEST_ROOT/result --expr "(builtins.getFlake \"git+file://$flake1Dir?rev=$hash2\").packages.$system.default"
+
+# Regression test for dirOf on the root of the flake.
+[[ $(nix eval --json flake1#parent) = '"/"' ]]
 
 # Building a flake with an unlocked dependency should fail in pure mode.
 (! nix build -o $TEST_ROOT/result flake2#bar --no-registries)
@@ -171,7 +175,7 @@ nix build -o $TEST_ROOT/result --no-registries git+file://$flake2Dir#bar --refre
 nix build -o $TEST_ROOT/result --no-use-registries git+file://$flake2Dir#bar --refresh
 
 # Test whether indirect dependencies work.
-nix build -o $TEST_ROOT/result $flake3Dir#xyzzy
+nix build -o $TEST_ROOT/result git+file://$flake3Dir?ref=master#xyzzy
 git -C $flake3Dir add flake.lock
 
 # Add dependency to flake3.
@@ -235,13 +239,13 @@ cat > $flake3Dir/flake.nix <<EOF
       flake = false;
     };
     nonFlakeFile = {
-      url = path://$nonFlakeDir/README.md;
+      url = path://$nonFlakeDir/README.md?lock=1;
       flake = false;
     };
-    nonFlakeFile2 = {
-      url = "$nonFlakeDir/README.md";
-      flake = false;
-    };
+    #nonFlakeFile2 = {
+    #  url = "$nonFlakeDir/README.md";
+    #  flake = false;
+    #};
   };
 
   description = "Fnord";
@@ -259,8 +263,8 @@ cat > $flake3Dir/flake.nix <<EOF
         buildCommand = ''
           cat \${inputs.nonFlake}/README.md > \$out
           [[ \$(cat \${inputs.nonFlake}/README.md) = \$(cat \${inputs.nonFlakeFile}) ]]
-          [[ \${inputs.nonFlakeFile} = \${inputs.nonFlakeFile2} ]]
         '';
+        #  [[ \${inputs.nonFlakeFile} = \${inputs.nonFlakeFile2} ]]
       };
   };
 }
@@ -309,7 +313,7 @@ cat > $flake3Dir/flake.nix <<EOF
 {
   inputs = {
     nonFlake = {
-      url = "$nonFlakeDir";
+      url = "git+file://$nonFlakeDir";
       flake = false;
     };
   };

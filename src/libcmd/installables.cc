@@ -11,6 +11,7 @@
 #include "derivations.hh"
 #include "eval-inline.hh"
 #include "eval.hh"
+#include "eval-settings.hh"
 #include "get-drvs.hh"
 #include "store-api.hh"
 #include "shared.hh"
@@ -19,6 +20,7 @@
 #include "url.hh"
 #include "registry.hh"
 #include "build-result.hh"
+#include "fs-input-accessor.hh"
 
 #include <regex>
 #include <queue>
@@ -108,7 +110,7 @@ MixFlakeOptions::MixFlakeOptions()
         .category = category,
         .labels = {"flake-lock-path"},
         .handler = {[&](std::string lockFilePath) {
-            lockFlags.referenceLockFilePath = lockFilePath;
+            lockFlags.referenceLockFilePath = getUnfilteredRootPath(CanonPath::fromCwd(lockFilePath));
         }},
         .completer = completePath
     });
@@ -119,7 +121,7 @@ MixFlakeOptions::MixFlakeOptions()
         .category = category,
         .labels = {"flake-lock-path"},
         .handler = {[&](std::string lockFilePath) {
-            lockFlags.outputLockFilePath = lockFilePath;
+            lockFlags.outputLockFilePath = getUnfilteredRootPath(CanonPath::fromCwd(lockFilePath));
         }},
         .completer = completePath
     });
@@ -233,9 +235,10 @@ void SourceExprCommand::completeInstallable(std::string_view prefix)
 
             evalSettings.pureEval = false;
             auto state = getEvalState();
-            Expr *e = state->parseExprFromFile(
-                resolveExprPath(state->checkSourcePath(lookupFileArg(*state, *file)))
-                );
+            auto e =
+                state->parseExprFromFile(
+                    resolveExprPath(
+                        lookupFileArg(*state, *file)));
 
             Value root;
             state->eval(e, root);
@@ -402,10 +405,10 @@ ref<eval_cache::EvalCache> openEvalCache(
     EvalState & state,
     std::shared_ptr<flake::LockedFlake> lockedFlake)
 {
-    auto fingerprint = lockedFlake->getFingerprint();
+    auto fingerprint = lockedFlake->getFingerprint(state.store);
     return make_ref<nix::eval_cache::EvalCache>(
         evalSettings.useEvalCache && evalSettings.pureEval
-            ? std::optional { std::cref(fingerprint) }
+            ? fingerprint
             : std::nullopt,
         state,
         [&state, lockedFlake]()

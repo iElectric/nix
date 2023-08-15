@@ -129,6 +129,7 @@
             bzip2 xz brotli editline
             openssl sqlite
             libarchive
+            libgit2
             boost
             lowdown-nix
           ]
