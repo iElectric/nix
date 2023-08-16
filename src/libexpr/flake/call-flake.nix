@@ -70,7 +70,11 @@ let
 
           outPath = sourceInfo + ((if subdir == "" then "" else "/") + subdir);
 
-          flake = import (outPath + "/flake.nix");
+          file = if builtins.pathExists (outPath + "/.devenv.flake.nix")
+                 then "/.devenv.flake.nix"
+                 else "/flake.nix";
+
+          flake = import (outPath + file);
 
           inputs = builtins.mapAttrs
             (inputName: inputSpec: allNodes.${resolveInput inputSpec})

@@ -247,7 +247,7 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
 
         // Usually ignored, so add it manually
         if (pathExists(".devenv.flake.nix")) {
-            info.files.insert(CanonPath(path));
+            info.files.insert(CanonPath(".devenv.flake.nix"));
         }
         return info;
     }
