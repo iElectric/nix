@@ -239,10 +239,16 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
 
         git_status_options options = GIT_STATUS_OPTIONS_INIT;
         options.flags |= GIT_STATUS_OPT_INCLUDE_UNMODIFIED;
+        options.flags |= GIT_STATUS_OPT_INCLUDE_UNTRACKED;
+        options.flags |= GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS;
         options.flags |= GIT_STATUS_OPT_EXCLUDE_SUBMODULES;
         if (git_status_foreach_ext(*this, &options, &statusCallbackTrampoline, &statusCallback))
             throw Error("getting working directory status: %s", git_error_last()->message);
 
+        // Usually ignored, so add it manually
+        if (pathExists(".devenv.flake.nix")) {
+            info.files.insert(CanonPath(path));
+        }
         return info;
     }
 
