@@ -179,6 +179,12 @@ static Flake readFlake(
     const InputPath & lockRootPath)
 {
     auto flakePath = rootDir / CanonPath(resolvedRef.subdir) / "flake.nix";
+    auto devEnvPath = rootDir / CanonPath(resolvedRef.subdir)  / ".devenv.flake.nix";
+    if (devEnvPath.pathExists()) {
+      flakePath = devEnvPath;
+    } else if (!flakePath.pathExists()) {
+      throw Error("'%s' does not exist", devEnvPath);
+    }
 
     // NOTE evalFile forces vInfo to be an attrset because mustBeTrivial is true.
     Value vInfo;
