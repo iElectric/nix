@@ -246,15 +246,12 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
             throw Error("getting working directory status: %s", git_error_last()->message);
 
         // Usually ignored, so add it manually
-        if (pathExists(".devenv.flake.nix")) {
-            info.files.insert(CanonPath(".devenv.flake.nix"));
+        if (pathExists(CanonPath::fromCwd(".devenv.flake.nix").abs())) {
+            info.files.insert(CanonPath::fromCwd(".devenv.flake.nix").removePrefix(path).rel());
+            info.files.insert(CanonPath::fromCwd(".devenv/flake.json").removePrefix(path).rel());
+            info.files.insert(CanonPath::fromCwd(".devenv/devenv.json").removePrefix(path).rel());
         }
-        if (pathExists(".devenv/flake.json")) {
-            info.files.insert(CanonPath(".devenv/flake.json"));
-        }
-        if (pathExists(".devenv/devenv.json")) {
-            info.files.insert(CanonPath(".devenv/devenv.json"));
-        }
+
         return info;
     }
 
