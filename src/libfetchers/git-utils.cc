@@ -251,6 +251,12 @@ struct GitRepoImpl : GitRepo, std::enable_shared_from_this<GitRepoImpl>
             info.files.insert(CanonPath::fromCwd(".devenv/flake.json").removePrefix(path).rel());
             info.files.insert(CanonPath::fromCwd(".devenv/devenv.json").removePrefix(path).rel());
         }
+        if (pathExists(CanonPath::fromCwd("devenv.local.nix").abs())) {
+            info.files.insert(CanonPath::fromCwd("devenv.local.nix").removePrefix(path).rel());
+        }
+        if (pathExists(CanonPath::fromCwd(".env").abs())) {
+            info.files.insert(CanonPath::fromCwd(".env").removePrefix(path).rel());
+        }
 
         return info;
     }
