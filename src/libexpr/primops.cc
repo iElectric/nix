@@ -935,7 +935,16 @@ static RegisterPrimOp primop_tryEval({
 static void prim_getEnv(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
     std::string name(state.forceStringNoCtx(*args[0], pos, "while evaluating the first argument passed to builtins.getEnv"));
-    v.mkString(evalSettings.restrictEval || evalSettings.pureEval ? "" : getEnv(name).value_or(""));
+
+    if (evalSettings.restrictEval || evalSettings.pureEval) {
+        if (name == "NIXPKGS_CONFIG") {
+            v.mkString(getEnv(name).value_or(""));
+        } else {
+            v.mkString("");
+        }
+    } else {
+        v.mkString(getEnv(name).value_or(""));
+    }
 }
 
 static RegisterPrimOp primop_getEnv({
