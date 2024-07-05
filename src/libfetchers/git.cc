@@ -371,7 +371,7 @@ struct GitInputScheme : InputScheme
 
     bool getSubmodulesAttr(const Input & input) const
     {
-        return maybeGetBoolAttr(input.attrs, "submodules").value_or(false);
+        return maybeGetBoolAttr(input.attrs, "submodules").value_or(true);
     }
 
     bool getExportIgnoreAttr(const Input & input) const
