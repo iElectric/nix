@@ -154,13 +154,20 @@ DownloadTarballResult downloadTarball(
             });
     });
 
-    // FIXME: fall back to cached value if download fails.
+    // TODO: fall back to cached value if download fails.
+
+    auto act = std::make_unique<Activity>(*logger, lvlInfo, actUnknown,
+        fmt("unpacking '%s' into the Git cache", url));
+
+    AutoDelete cleanupTemp;
 
     /* Note: if the download is cached, `importTarball()` will receive
        no data, which causes it to import an empty tarball. */
     TarArchive archive { *source };
     auto parseSink = getTarballCache()->getFileSystemObjectSink();
     auto lastModified = unpackTarfileToSink(archive, *parseSink);
+
+    act.reset();
 
     auto res(_res->lock());
 
