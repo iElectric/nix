@@ -159,8 +159,6 @@ DownloadTarballResult downloadTarball(
     auto act = std::make_unique<Activity>(*logger, lvlInfo, actUnknown,
         fmt("unpacking '%s' into the Git cache", url));
 
-    AutoDelete cleanupTemp;
-
     /* Note: if the download is cached, `importTarball()` will receive
        no data, which causes it to import an empty tarball. */
     TarArchive archive { *source };
