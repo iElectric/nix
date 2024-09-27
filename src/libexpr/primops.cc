@@ -1805,7 +1805,7 @@ static RegisterPrimOp primop_dirOf({
 static void prim_readFile(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
     auto path = realisePath(state, pos, *args[0]);
-    printTalkative("reading file '%1%'", path);
+    printTalkative("devenv readFile: '%1%'", path);
     auto s = path.readFile();
     if (s.find((char) 0) != std::string::npos)
         state.error<EvalError>(
